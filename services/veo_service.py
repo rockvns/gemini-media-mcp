@@ -21,6 +21,25 @@ from services.client import (
 )
 
 
+def _format_size(size_bytes: int) -> str:
+    """Format bytes into readable KB/MB string."""
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    return f"{size_bytes / 1024:.1f} KB"
+
+
+def _save_downloaded_video(client, video_ref, dest_file: Path) -> int:
+    """Download and save video safely to destination path, verifying file existence and size."""
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
+    result = client.files.download(file=video_ref, destination=str(dest_file))
+    if isinstance(result, (bytes, bytearray)) and not (dest_file.exists() and dest_file.stat().st_size > 0):
+        with open(dest_file, "wb") as f:
+            f.write(result)
+    if not dest_file.exists() or dest_file.stat().st_size == 0:
+        raise IOError(f"Video file at '{dest_file}' is missing or empty after download.")
+    return dest_file.stat().st_size
+
+
 def generate_veo_video(
     prompt: str,
     model: str = "veo-3.1-generate-preview",
@@ -147,7 +166,7 @@ def generate_veo_video(
 
         dest_file = resolve_output_path(output_path, "veo_video", "mp4")
         generated_video = operation.response.generated_videos[0]
-        client.files.download(file=generated_video.video, destination=str(dest_file))
+        file_size = _save_downloaded_video(client, generated_video.video, dest_file)
 
         total_elapsed = int(time.time() - start_time)
         ActiveOperationsManager.update(op_name, status="COMPLETED", output_path=str(dest_file))
@@ -161,12 +180,14 @@ def generate_veo_video(
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
             "duration_seconds": total_elapsed,
+            "file_size_bytes": file_size,
         })
 
         char_info = f", {len(ref_objects)} Character(s)" if ref_objects else ""
         return (
             f"[Video Successfully Generated!]\n"
             f"- Saved to: {dest_file}\n"
+            f"- File Size: {_format_size(file_size)}\n"
             f"- Operation ID: {op_name}\n"
             f"- Model: {model} | Mode: {mode_desc}{char_info}\n"
             f"- Resolution: {resolution} | Aspect Ratio: {aspect_ratio} | Duration: {duration_seconds}s\n"
@@ -218,7 +239,7 @@ def check_veo_operation(operation_name: str, output_path: Optional[str] = None) 
         target_path = output_path or op_data.get("output_path")
         dest_file = resolve_output_path(target_path, "veo_operation", "mp4")
         generated_video = operation.response.generated_videos[0]
-        client.files.download(file=generated_video.video, destination=str(dest_file))
+        file_size = _save_downloaded_video(client, generated_video.video, dest_file)
 
         ActiveOperationsManager.update(operation_name, status="COMPLETED", output_path=str(dest_file))
 
@@ -230,12 +251,14 @@ def check_veo_operation(operation_name: str, output_path: Optional[str] = None) 
             "created_at": datetime.now().isoformat(),
             "aspect_ratio": op_data.get("aspect_ratio", "16:9"),
             "resolution": op_data.get("resolution", "720p"),
+            "file_size_bytes": file_size,
         })
 
         return (
             f"[Video Generation COMPLETE!]\n"
             f"- Operation ID: {operation_name}{elapsed_str}\n"
             f"- File Saved to: {dest_file}\n"
+            f"- File Size: {_format_size(file_size)}\n"
             f"- Status: COMPLETED (saved to history and disk)"
         )
 

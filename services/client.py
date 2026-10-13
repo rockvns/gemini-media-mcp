@@ -24,83 +24,174 @@ GENERATED_HISTORY: List[Dict[str, Any]] = []
 # ERROR FORMATTING & RESILIENCE
 # ==============================================================================
 
+def _parse_error_details(err: Exception) -> Dict[str, Any]:
+    """Extract structured error metadata from Google GenAI ClientError if available."""
+    info: Dict[str, Any] = {
+        "code": getattr(err, "code", None),
+        "status": getattr(err, "status", None),
+        "message": getattr(err, "message", str(err)),
+        "retry_delay": None,
+        "retry_in_text": None,
+        "violations": [],
+        "is_free_tier": False,
+        "is_quota_zero": False,
+    }
+
+    # Extract retry delay from message text like 'Please retry in 14h32m17s'
+    msg = info["message"] or ""
+    import re
+    retry_match = re.search(r"Please retry in ([^\.]+)", msg, re.IGNORECASE)
+    if retry_match:
+        info["retry_in_text"] = retry_match.group(1).strip()
+
+    if "free_tier" in msg.lower() or "freetier" in msg.lower():
+        info["is_free_tier"] = True
+    if "limit: 0" in msg.lower() or "quota exceeded" in msg.lower():
+        info["is_quota_zero"] = True
+
+    # Parse details dictionary
+    details_obj = getattr(err, "details", None)
+    if isinstance(details_obj, dict):
+        err_dict = details_obj.get("error", {})
+        info["message"] = err_dict.get("message", info["message"])
+        info["status"] = err_dict.get("status", info["status"])
+        info["code"] = err_dict.get("code", info["code"])
+        raw_details = err_dict.get("details", [])
+        if isinstance(raw_details, list):
+            for d in raw_details:
+                if isinstance(d, dict):
+                    dtype = d.get("@type", "")
+                    if "RetryInfo" in dtype:
+                        info["retry_delay"] = d.get("retryDelay")
+                    elif "QuotaFailure" in dtype:
+                        violations = d.get("violations", [])
+                        info["violations"] = violations
+                        for v in violations:
+                            qid = str(v.get("quotaId", ""))
+                            if "FreeTier" in qid:
+                                info["is_free_tier"] = True
+
+    return info
+
+
 def format_api_error(err: Exception, context: str = "") -> str:
     """Format exceptions into human- and LLM-friendly diagnostic explanations without crashing."""
     err_str = str(err)
     err_type = type(err).__name__
-    prefix = f"Error during {context}: " if context else "Error: "
+    prefix = f"Error during {context}:\n" if context else "Error:\n"
+
+    parsed = _parse_error_details(err)
+    err_code = str(parsed.get("code") or "")
+    err_status = str(parsed.get("status") or "")
+    raw_message = parsed.get("message") or err_str
 
     # 1. API Key missing or default placeholder
     if isinstance(err, ValueError) and "GEMINI_API_KEY" in err_str:
         return (
-            f"{prefix}Invalid or missing Gemini API Key.\n"
-            f"Details: {err_str}\n"
-            f"Action Required: Set your GEMINI_API_KEY in your environment or in d:\\work\\MCP\\google-flow\\.env.\n"
-            f"Google AI Studio keys start with 'AIzaSy...'."
+            f"{prefix}[Authentication: Missing API Key]\n"
+            f"- Details: {err_str}\n"
+            f"- Action Required: Set your GEMINI_API_KEY in 'd:\\work\\MCP\\google-flow\\.env' or MCP configuration.\n"
+            f"  Standard Google AI Studio API keys start with 'AIzaSy...'."
         )
 
-    # 2. Authentication / Permission errors (401 / 403)
-    if any(code in err_str for code in ["401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED"]):
-        return (
-            f"{prefix}Authentication / Permission Denied (HTTP 401/403).\n"
-            f"Details: {err_str}\n"
-            f"Possible Causes:\n"
-            f"1. The configured GEMINI_API_KEY is invalid, expired, or has a typo.\n"
-            f"2. The API key does not have access permissions enabled for this generative media model in Google AI Studio / Google Cloud.\n"
-            f"Action Required: Verify GEMINI_API_KEY in your MCP config (c:\\Users\\chand\\.gemini\\config\\mcp_config.json) or .env file."
-        )
+    # 2. Quota Exceeded / Rate Limit (429 / RESOURCE_EXHAUSTED)
+    if err_code == "429" or "429" in err_str or "RESOURCE_EXHAUSTED" in err_status or "quota" in err_str.lower():
+        retry_time = parsed.get("retry_in_text")
+        if not retry_time and parsed.get("retry_delay"):
+            delay_sec = str(parsed.get("retry_delay")).rstrip("s")
+            try:
+                s = int(delay_sec)
+                hours, rem = divmod(s, 3600)
+                minutes, seconds = divmod(rem, 60)
+                if hours > 0:
+                    retry_time = f"{hours}h {minutes}m {seconds}s"
+                elif minutes > 0:
+                    retry_time = f"{minutes}m {seconds}s"
+                else:
+                    retry_time = f"{seconds}s"
+            except Exception:
+                retry_time = str(parsed.get("retry_delay"))
 
-    # 3. Quota Exceeded / Rate Limit (429 / RESOURCE_EXHAUSTED)
-    if any(code in err_str for code in ["429", "RESOURCE_EXHAUSTED", "Quota", "quota"]):
+        # Check if this is a Free Tier limit (e.g. limit: 0 or daily quota exhaustion)
+        if parsed.get("is_free_tier") or parsed.get("is_quota_zero") or "limit: 0" in raw_message:
+            reset_msg = f"\n- Daily Quota Reset In: {retry_time}" if retry_time else ""
+            return (
+                f"{prefix}[429 RESOURCE_EXHAUSTED: Free Tier Quota Reached]\n"
+                f"- Diagnosis: Your Google AI Studio API key is on the Free Tier, where generative media (image/video) quota is 0 or daily requests are exhausted.{reset_msg}\n"
+                f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}\n\n"
+                f"How to resolve:\n"
+                f"1. Enable Billing / Pay-As-You-Go in Google AI Studio:\n"
+                f"   Go to https://aistudio.google.com/ -> Click on 'Get API key' / Project Settings -> Set up Pay-As-You-Go billing.\n"
+                f"2. Generative media models (Gemini Image, Imagen, and Veo) require a billing-enabled Google Cloud project.\n"
+                f"3. Once billing is enabled, update GEMINI_API_KEY in 'd:\\work\\MCP\\google-flow\\.env' and reload."
+            )
+        else:
+            wait_msg = f"Wait {retry_time}" if retry_time else "Wait 30-60 seconds"
+            return (
+                f"{prefix}[429 TOO MANY REQUESTS: Rate Limit Exceeded]\n"
+                f"- Diagnosis: You have exceeded the requests-per-minute (RPM) or tokens-per-minute (TPM) threshold.\n"
+                f"- Recommended Action: {wait_msg} before sending the next generation request.\n"
+                f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}"
+            )
+
+    # 3. Authentication / Permission errors (401 / 403)
+    if any(c in err_str for c in ["401", "403", "PERMISSION_DENIED", "UNAUTHENTICATED"]) or err_code in ["401", "403"]:
         return (
-            f"{prefix}API Quota / Rate Limit Exceeded (HTTP 429 / RESOURCE_EXHAUSTED).\n"
-            f"Details: {err_str}\n"
-            f"Explanation: You have reached the rate limit (RPM/TPM) for this generative model on your API tier.\n"
-            f"Action Required:\n"
-            f"- Wait 30-60 seconds before retrying.\n"
-            f"- If generating video or 4K images continuously, space requests apart or request a quota tier increase in Google AI Studio / Cloud Console."
+            f"{prefix}[Authentication / Permission Denied (HTTP {err_code or '401/403'})]\n"
+            f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}\n"
+            f"- Possible Causes:\n"
+            f"  1. The GEMINI_API_KEY configured is invalid, expired, or has a typo.\n"
+            f"  2. The Google Cloud project does not have Generative Media APIs enabled.\n"
+            f"- Action Required: Check your GEMINI_API_KEY in 'd:\\work\\MCP\\google-flow\\.env' or 'c:\\Users\\chand\\.gemini\\config\\mcp_config.json'."
         )
 
     # 4. Model Not Found / Unsupported (404 / NOT_FOUND)
-    if any(code in err_str for code in ["404", "NOT_FOUND", "not found"]):
+    if any(c in err_str for c in ["404", "NOT_FOUND", "not found"]) or err_code == "404":
         return (
-            f"{prefix}Model Not Found or Unavailable (HTTP 404).\n"
-            f"Details: {err_str}\n"
-            f"Explanation: The requested model identifier is either unavailable on your account/region or requires private preview access.\n"
-            f"Action Required: Call 'list_available_models' to inspect available models and their supported configurations."
+            f"{prefix}[Model Not Found or Unavailable (HTTP 404)]\n"
+            f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}\n"
+            f"- Action Required: Call 'list_available_models' to inspect available models supported on your account tier."
         )
 
     # 5. Bad Request / Invalid Parameters (400 / INVALID_ARGUMENT)
-    if any(code in err_str for code in ["400", "INVALID_ARGUMENT"]):
+    if any(c in err_str for c in ["400", "INVALID_ARGUMENT"]) or err_code == "400":
         return (
-            f"{prefix}Invalid Request Parameter (HTTP 400).\n"
-            f"Details: {err_str}\n"
-            f"Explanation: One or more parameters (aspect ratio, resolution, duration, or image format) are invalid for the chosen model.\n"
-            f"Action Required: Inspect supported options via 'get_model_specifications(model_name=...)'."
+            f"{prefix}[Invalid Request Parameter (HTTP 400)]\n"
+            f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}\n"
+            f"- Explanation: One or more parameters (aspect ratio, image size, resolution, or duration) are not accepted by this model.\n"
+            f"- Action Required: Verify supported parameters via 'get_model_specifications(model_name=...)'."
         )
 
     # 6. Safety Filter / Content Policy Violation
-    if any(term in err_str.lower() for term in ["safety", "blocked", "harm_category"]):
+    if any(term in err_str.lower() for term in ["safety", "blocked", "harm_category", "rai_filtered"]):
         return (
-            f"{prefix}Generation Blocked by Safety Filters.\n"
-            f"Details: {err_str}\n"
-            f"Explanation: Google's generative safety filter flagged the prompt or reference image as potentially sensitive or violating safety guidelines.\n"
-            f"Action Required: Modify the prompt wording to avoid sensitive, violent, or copyrighted concepts."
+            f"{prefix}[Generation Blocked by Safety Filters]\n"
+            f"- Details: {raw_message.splitlines()[0] if raw_message else err_str}\n"
+            f"- Explanation: Google's safety filters flagged the prompt or reference image as potentially sensitive.\n"
+            f"- Action Required: Adjust your prompt wording to avoid sensitive, violent, or trademarked terms."
         )
 
-    # 7. File not found
+    # 7. Network Timeout / Connection Issues
+    if any(term in err_str.lower() for term in ["timeout", "timed out", "deadline exceeded", "connection error"]):
+        return (
+            f"{prefix}[Network Timeout / Connection Error]\n"
+            f"- Details: The request took longer than expected or was interrupted by network latency.\n"
+            f"- Action Required: Verify your internet connection. For large 4K renders or video generation, use asynchronous mode ('wait_for_completion=False')."
+        )
+
+    # 8. File Not Found
     if isinstance(err, FileNotFoundError) or "No such file" in err_str:
         return (
-            f"{prefix}Required file not found.\n"
-            f"Details: {err_str}\n"
-            f"Action Required: Verify that reference or keyframe image paths exist and are accessible."
+            f"{prefix}[File Not Found]\n"
+            f"- Details: {err_str}\n"
+            f"- Action Required: Verify that reference or keyframe image paths exist and are accessible on disk."
         )
 
     # Generic catch-all
     return (
-        f"{prefix}An unexpected error occurred ({err_type}).\n"
-        f"Details: {err_str}\n"
-        f"Troubleshooting: Use 'check_api_status' to verify connectivity and configuration."
+        f"{prefix}[Unexpected Error ({err_type})]\n"
+        f"- Details: {err_str}\n"
+        f"- Troubleshooting: Run 'check_api_status' to verify API key validity, output storage permissions, and active operations."
     )
 
 
