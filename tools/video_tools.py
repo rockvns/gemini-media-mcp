@@ -45,8 +45,8 @@ def register_video_tools(mcp):
         can track progress using 'check_video_operation' without hitting tool timeouts.
 
         Available Models:
-        - 'veo-3.1-generate-preview' (Recommended): 8s video with sound, keyframe interpolation, 720p/1080p/4k, 16:9 & 9:16.
-        - 'gemini-omni-1.1-flash': Ultra-fast multimodal video generation via Interactions API.
+        - 'gemini-omni-1.1-flash' (Recommended Default): Ultra-fast multimodal video generation via Interactions API.
+        - 'veo-3.1-generate-preview': 8s video with sound, keyframe interpolation, 720p/1080p/4k, 16:9 & 9:16.
         - 'veo-3.0-generate-001': Standard Veo 3.0 model.
         - 'veo-3.0-fast-generate-001': Fast Veo 3.0 model.
 
@@ -63,8 +63,8 @@ def register_video_tools(mcp):
             last_frame_path: Path to ending keyframe image (for 2-frame interpolation).
             character_paths: Optional list of character reference images (up to 3).
             aspect_ratio: '16:9' or '9:16' (defaults to saved user preference).
-            resolution: '720p', '1080p', or '4k' (defaults to saved user preference).
-            duration_seconds: Video duration in seconds (default 8s on Veo).
+            resolution: 'standard', '720p', '1080p', or '4k' (defaults to saved user preference).
+            duration_seconds: Video duration in seconds (default 8s).
             negative_prompt: Elements to exclude from generation.
             output_path: Optional destination .mp4 path.
             save_as_preference: If True, saves these parameters as your default video preferences.
@@ -76,9 +76,9 @@ def register_video_tools(mcp):
             prefs = PreferencesManager.load()
             v_prefs = prefs.get("video") or {}
 
-            chosen_model = model or v_prefs.get("model", "veo-3.1-generate-preview")
+            chosen_model = model or v_prefs.get("model", "gemini-omni-1.1-flash")
             chosen_aspect = aspect_ratio or v_prefs.get("aspect_ratio", "16:9")
-            chosen_resolution = resolution or v_prefs.get("resolution", "720p")
+            chosen_resolution = resolution or v_prefs.get("resolution", "standard")
             chosen_duration = duration_seconds or v_prefs.get("duration_seconds", 8)
 
             if save_as_preference:
@@ -94,8 +94,8 @@ def register_video_tools(mcp):
                 return (
                     f"Error: Unknown video model '{chosen_model}'.\n"
                     f"Available Video Models:\n"
-                    f"- 'veo-3.1-generate-preview' (Recommended)\n"
-                    f"- 'gemini-omni-1.1-flash'\n"
+                    f"- 'gemini-omni-1.1-flash' (Recommended Default)\n"
+                    f"- 'veo-3.1-generate-preview'\n"
                     f"- 'veo-3.0-generate-001'\n"
                     f"- 'veo-3.0-fast-generate-001'\n"
                     f"Use 'get_model_specifications(model_name=\"{chosen_model}\")' to inspect requirements."
@@ -244,8 +244,8 @@ def register_video_tools(mcp):
             failed = len([o for o in all_ops if o.get("status") == "FAILED"])
 
             prefs = PreferencesManager.load()
-            default_v = (prefs.get("video") or {}).get("model", "Not configured (veo-3.1-generate-preview recommended)")
-            default_i = (prefs.get("image") or {}).get("model", "Not configured (gemini-nano-banana-2.1 recommended)")
+            default_v = (prefs.get("video") or {}).get("model", "gemini-omni-1.1-flash (Default)")
+            default_i = (prefs.get("image") or {}).get("model", "gemini-nano-banana-2.1 (Default)")
 
             return (
                 "=== Gemini & Veo Media Server Health Check ===\n\n"

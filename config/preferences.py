@@ -91,14 +91,14 @@ class PreferencesManager:
                 "[Video Preferences]\n"
                 "- Status: NOT CONFIGURED YET\n"
                 "- Note: The LLM will ask you for your preferred model, resolution, and aspect ratio on first interaction,\n"
-                "  or you can run 'set_user_preferences(media_type=\"video\", ...)'."
+                "  or you can run 'set_user_preferences(media_type=\"video\", ...)'. (Default: gemini-omni-1.1-flash)"
             )
         else:
             video_section = (
                 "[Video Preferences]\n"
-                f"- Default Model: {vp.get('model', 'veo-3.1-generate-preview')}\n"
+                f"- Default Model: {vp.get('model', 'gemini-omni-1.1-flash')}\n"
                 f"- Aspect Ratio: {vp.get('aspect_ratio', '16:9')}\n"
-                f"- Resolution: {vp.get('resolution', '720p')}\n"
+                f"- Resolution: {vp.get('resolution', 'standard')}\n"
                 f"- Duration: {vp.get('duration_seconds', 8)} seconds"
             )
 
@@ -155,9 +155,9 @@ Preferences file: {PREFERENCES_FILE}"""
         if m_type == "video":
             if not prefs.get("video"):
                 prefs["video"] = {
-                    "model": "veo-3.1-generate-preview",
+                    "model": "gemini-omni-1.1-flash",
                     "aspect_ratio": "16:9",
-                    "resolution": "720p",
+                    "resolution": "standard",
                     "duration_seconds": 8,
                 }
             target = prefs["video"]

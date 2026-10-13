@@ -8,6 +8,17 @@ Modularized architecture:
 - prompts/     : MCP prompt templates (Director, Keyframe, Consistency, Preferences).
 """
 
+import sys
+import logging
+
+# Strictly ensure all logging and warnings go to stderr so stdout remains 100% clean for MCP JSON-RPC
+logging.basicConfig(stream=sys.stderr, level=logging.WARNING, force=True)
+for name in ["google", "google.genai", "httpx", "httpcore", "mcp"]:
+    _l = logging.getLogger(name)
+    _l.setLevel(logging.WARNING)
+    _l.handlers = [logging.StreamHandler(sys.stderr)]
+    _l.propagate = False
+
 from mcp.server.mcpserver import MCPServer
 
 from config.constants import MODEL_SPECIFICATIONS
