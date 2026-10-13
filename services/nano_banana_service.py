@@ -1,13 +1,16 @@
 """
 Gemini Nano Banana image generation & editing service.
 Handles single image generation, 1-frame or 2-frame keyframe generation, and image editing.
+Uses supported 'image/jpeg' MIME type for Google GenAI Interactions API, with optional PNG auto-conversion.
 Wrapped with comprehensive exception shielding to keep the MCP process resilient.
 """
 
+import io
 import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from PIL import Image
 
 from config.constants import OUTPUTS_DIR
 from services.client import (
@@ -18,6 +21,20 @@ from services.client import (
     format_api_error,
     GENERATED_HISTORY,
 )
+
+
+def _save_image_data(img_bytes: bytes, dest_file: Path) -> None:
+    """Save image bytes to file, converting to PNG if requested by destination suffix."""
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
+    if dest_file.suffix.lower() == ".png":
+        try:
+            pil_img = Image.open(io.BytesIO(img_bytes))
+            pil_img.save(dest_file, format="PNG")
+            return
+        except Exception:
+            pass
+    with open(dest_file, "wb") as f:
+        f.write(img_bytes)
 
 
 def generate_nano_banana_image(
@@ -36,9 +53,10 @@ def generate_nano_banana_image(
 
         tools = [{"type": "google_search"}] if enable_google_search else None
 
+        # Google Gemini API requires 'image/jpeg' for response_format.mime_type
         response_format = {
             "type": "image",
-            "mime_type": "image/png",
+            "mime_type": "image/jpeg",
             "aspect_ratio": aspect_ratio,
             "image_size": image_size,
         }
@@ -73,10 +91,9 @@ def generate_nano_banana_image(
         if not interaction.output_image or not interaction.output_image.data:
             return "Error: No image was returned by the model."
 
-        dest_file = resolve_output_path(output_path, "gemini_image", "png")
+        dest_file = resolve_output_path(output_path, "gemini_image", "jpg")
         img_bytes = base64.b64decode(interaction.output_image.data)
-        with open(dest_file, "wb") as f:
-            f.write(img_bytes)
+        _save_image_data(img_bytes, dest_file)
 
         GENERATED_HISTORY.append({
             "type": "image",
@@ -120,9 +137,10 @@ def generate_keyframes_pair(
         base_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # Google Gemini API requires 'image/jpeg' for response_format.mime_type
         response_format = {
             "type": "image",
-            "mime_type": "image/png",
+            "mime_type": "image/jpeg",
             "aspect_ratio": aspect_ratio,
             "image_size": image_size,
         }
@@ -155,9 +173,8 @@ def generate_keyframes_pair(
         if not interaction_1.output_image or not interaction_1.output_image.data:
             return "Error: Failed to generate starting keyframe."
 
-        frame_1_path = base_dir / f"keyframe_start_{timestamp}.png"
-        with open(frame_1_path, "wb") as f:
-            f.write(base64.b64decode(interaction_1.output_image.data))
+        frame_1_path = base_dir / f"keyframe_start_{timestamp}.jpg"
+        _save_image_data(base64.b64decode(interaction_1.output_image.data), frame_1_path)
 
         GENERATED_HISTORY.append({
             "type": "keyframe_start",
@@ -192,9 +209,8 @@ def generate_keyframes_pair(
                 f"Error: Failed to generate ending keyframe."
             )
 
-        frame_2_path = base_dir / f"keyframe_end_{timestamp}.png"
-        with open(frame_2_path, "wb") as f:
-            f.write(base64.b64decode(interaction_2.output_image.data))
+        frame_2_path = base_dir / f"keyframe_end_{timestamp}.jpg"
+        _save_image_data(base64.b64decode(interaction_2.output_image.data), frame_2_path)
 
         GENERATED_HISTORY.append({
             "type": "keyframe_end",
@@ -244,7 +260,8 @@ def edit_nano_banana_image(
             {"type": "image", "data": b64_img, "mime_type": mime}
         ]
 
-        response_format = {"type": "image", "mime_type": "image/png"}
+        # Google Gemini API requires 'image/jpeg' for response_format.mime_type
+        response_format = {"type": "image", "mime_type": "image/jpeg"}
         if aspect_ratio:
             response_format["aspect_ratio"] = aspect_ratio
         if image_size:
@@ -259,10 +276,9 @@ def edit_nano_banana_image(
         if not interaction.output_image or not interaction.output_image.data:
             return "Error: No image returned by the editing model."
 
-        dest_file = resolve_output_path(output_path, "gemini_edited_image", "png")
+        dest_file = resolve_output_path(output_path, "gemini_edited_image", "jpg")
         img_bytes = base64.b64decode(interaction.output_image.data)
-        with open(dest_file, "wb") as f:
-            f.write(img_bytes)
+        _save_image_data(img_bytes, dest_file)
 
         GENERATED_HISTORY.append({
             "type": "image_edit",
