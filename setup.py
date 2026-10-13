@@ -16,11 +16,13 @@ setup(
     py_modules=["gemini_mcp"],
     python_requires=">=3.10",
     install_requires=[
-        "mcp>=2.3.0",
+        "mcp[cli]>=2.3.0",
+        "typer>=0.16.0",
         "python-dotenv>=1.2.0",
         "google-genai>=2.30.0",
         "pillow>=12.0.0",
         "pyinstaller>=6.11.0",
+        "setuptools>=68.0.0",
     ],
     entry_points={
         "console_scripts": [
