@@ -33,3 +33,9 @@ outputs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Packaging & Build Artifacts
+build/
+dist/
+*.egg-info/
+*.spec

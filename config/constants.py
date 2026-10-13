@@ -2,10 +2,16 @@
 Constants and model specifications for Gemini & Veo media server.
 """
 
+import sys
 from pathlib import Path
 from typing import Dict, Any
 
-WORKSPACE_DIR = Path(__file__).resolve().parent.parent
+# When packaged as a frozen binary (e.g. PyInstaller), resolve paths relative to executable
+if getattr(sys, "frozen", False):
+    WORKSPACE_DIR = Path(sys.executable).resolve().parent
+else:
+    WORKSPACE_DIR = Path(__file__).resolve().parent.parent
+
 OUTPUTS_DIR = WORKSPACE_DIR / "outputs"
 PREFERENCES_FILE = WORKSPACE_DIR / "user_preferences.json"
 

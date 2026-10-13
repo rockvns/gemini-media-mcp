@@ -73,5 +73,9 @@ mcp.prompt()(veo_keyframe_storyboard_prompt)
 mcp.prompt()(character_consistency_prompt)
 
 
-if __name__ == "__main__":
+def main():
     mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    main()

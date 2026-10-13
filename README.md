@@ -56,7 +56,10 @@ A comprehensive [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 
 ```text
 google-flow/
+├── .github/workflows/
+│   └── build.yml              # CI/CD: Automated testing, PyInstaller builds & releases
 ├── gemini_mcp.py              # Main MCP server entrypoint
+├── setup.py                   # Setuptools package configuration & CLI script
 ├── user_preferences.json     # Persisted user preferences
 ├── test_gemini_server.py      # Verification test suite
 ├── requirements.txt           # Python dependencies
@@ -90,37 +93,108 @@ google-flow/
 ## Setup & Installation
 
 ### 1. Prerequisites
-- Python 3.10+
-- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/)
+- **Python**: Version 3.10 or higher.
+- **Gemini API Key**: Obtain a free or paid API key from [Google AI Studio](https://aistudio.google.com/).
+- **MCP Host**: Any MCP-compliant client such as **Google Antigravity IDE**, **Claude Desktop**, **Cursor**, or **VS Code** (with Cline/Roo Code).
 
-### 2. Virtual Environment
+---
+
+### 2. Step-by-Step Installation
+
+#### Step 1: Navigate to the Project Directory
 ```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate on Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Activate on Linux/macOS
-source .venv/bin/activate
+cd d:\work\MCP\google-flow
 ```
 
-### 3. Install Dependencies
+#### Step 2: Create a Virtual Environment
+```bash
+# Create a local virtual environment named .venv
+python -m venv .venv
+```
+
+#### Step 3: Activate the Virtual Environment
+- **Windows (PowerShell)**:
+  ```powershell
+  .venv\Scripts\Activate.ps1
+  ```
+  *(If script execution is disabled on PowerShell, first run: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`)*
+
+- **Windows (Command Prompt / CMD)**:
+  ```cmd
+  .venv\Scripts\activate.bat
+  ```
+
+- **Linux / macOS**:
+  ```bash
+  source .venv/bin/activate
+  ```
+
+#### Step 4: Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure API Key
-Copy `.env.example` to `.env` and set your API key:
+#### Step 5: Configure Environment Variables
+Copy the template `.env.example` to `.env`:
+```bash
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Linux / macOS / Git Bash
+cp .env.example .env
+```
+
+Open `.env` in your editor and provide your Gemini API key:
 ```ini
+# Required: Google Gemini API Key
 GEMINI_API_KEY=your_actual_gemini_api_key_here
+
+# Optional: Directory for generated media (defaults to ./outputs/)
+MEDIA_OUTPUT_DIR=outputs
 ```
 
 ---
 
-## MCP Server Configuration
+### 3. Verification & Self-Test
 
-To use this server in your MCP host (Antigravity IDE, Claude Desktop, Cursor, etc.), add it to your `mcp_config.json`:
+Before integrating with your MCP host, verify that all dependencies and tool definitions load cleanly:
+
+```bash
+python test_gemini_server.py
+```
+
+You should see:
+```text
+=== Testing Unified Media MCP Server (v2.1) ===
+Available Tools (10):
+ - get_user_preferences
+ - set_user_preferences
+ - reset_user_preferences
+ - get_model_specifications
+ - list_available_models
+ - generate_video
+ - check_video_operation
+ - generate_image
+ - generate_keyframes
+ - edit_image
+...
+All tools and preference management checks passed successfully!
+```
+
+---
+
+## MCP Server Host Configuration
+
+Add `gemini-media-mcp` to your MCP client configuration file so your AI assistant can discover and call its tools.
+
+### A. Google Antigravity IDE
+
+Open or create your Antigravity MCP configuration file:
+- **Global Config Path (Windows)**: `%USERPROFILE%\.gemini\config\mcp_config.json`
+- **Global Config Path (macOS/Linux)**: `~/.gemini/config/mcp_config.json`
+- **Or Workspace Config**: `.agents/mcp_config.json` inside your project root.
+
+Add the following entry under `mcpServers`:
 
 ```json
 {
@@ -130,12 +204,164 @@ To use this server in your MCP host (Antigravity IDE, Claude Desktop, Cursor, et
       "args": [
         "D:\\work\\MCP\\google-flow\\gemini_mcp.py"
       ],
-      "env": {}
+      "env": {
+        "GEMINI_API_KEY": "your_actual_gemini_api_key_here"
+      }
     }
   }
 }
 ```
-*(Replace paths with the absolute paths on your system)*
+
+> **Note**: On Windows, JSON strings require double backslashes (`\\`) in file paths.
+
+---
+
+### B. Claude Desktop
+
+Configuration file locations:
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Add the server definition:
+
+```json
+{
+  "mcpServers": {
+    "gemini-media-mcp": {
+      "command": "D:\\work\\MCP\\google-flow\\.venv\\Scripts\\python.exe",
+      "args": [
+        "D:\\work\\MCP\\google-flow\\gemini_mcp.py"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "your_actual_gemini_api_key_here"
+      }
+    }
+  }
+}
+```
+*Restart Claude Desktop after updating the config.*
+
+---
+
+### C. Cursor / VS Code (Cline / Roo-Code)
+
+In your client's MCP settings configuration (`cline_mcp_settings.json` or equivalent):
+
+```json
+{
+  "mcpServers": {
+    "gemini-media-mcp": {
+      "command": "D:/work/MCP/google-flow/.venv/Scripts/python.exe",
+      "args": [
+        "D:/work/MCP/google-flow/gemini_mcp.py"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "your_actual_gemini_api_key_here"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+---
+
+## Troubleshooting & Tips
+
+- **`GEMINI_API_KEY is not set`**:
+  Make sure your key is populated in `.env` within the `google-flow/` root directory, or explicitly passed in the `"env"` object of `mcp_config.json`.
+- **PowerShell Script Restriction (`Activate.ps1 cannot be loaded`)**:
+  Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in your PowerShell window, then retry `.venv\Scripts\Activate.ps1`.
+- **Invalid JSON Escape Sequences**:
+  In Windows paths inside JSON files, make sure to escape backslashes (e.g. `D:\\work\\...`) or use forward slashes (`D:/work/...`).
+- **Python Path**:
+  Ensure `command` points directly to the virtual environment's Python executable (`.venv\Scripts\python.exe` on Windows or `.venv/bin/python` on Unix).
+
+---
+
+## Packaging as Standalone Executable (.exe)
+
+You can package this server into a standalone Windows `.exe` using [PyInstaller](https://pyinstaller.org/) to ship and distribute it without requiring Python on the target machine.
+
+### 1. Install PyInstaller
+```powershell
+pip install pyinstaller
+```
+
+### 2. Build the Executable
+
+#### Option A: One-Directory Distribution (Recommended for lower startup latency)
+```powershell
+pyinstaller --noconfirm --onedir --console `
+  --name "gemini_mcp" `
+  --collect-all "mcp" `
+  --collect-all "google.genai" `
+  gemini_mcp.py
+```
+This generates a `dist/gemini_mcp/` directory containing `gemini_mcp.exe` and all bundled dependencies.
+
+#### Option B: Single Standalone File
+```powershell
+pyinstaller --noconfirm --onefile --console `
+  --name "gemini_mcp" `
+  --collect-all "mcp" `
+  --collect-all "google.genai" `
+  gemini_mcp.py
+```
+This produces a single portable `dist/gemini_mcp.exe`.
+
+### 3. Using the `.exe` in MCP Clients
+
+In your client's `mcp_config.json`, simply set `command` to the executable path and pass `args` as an empty list:
+
+```json
+{
+  "mcpServers": {
+    "gemini-media-mcp": {
+      "command": "D:\\work\\MCP\\google-flow\\dist\\gemini_mcp\\gemini_mcp.exe",
+      "args": [],
+      "env": {
+        "GEMINI_API_KEY": "your_actual_gemini_api_key_here"
+      }
+    }
+  }
+}
+```
+
+> **Important Notes for Packaging**:
+> - **Must use `--console`**: Do **not** use `--windowed` or `--noconsole`. MCP communicates over standard input / standard output (`stdio`) for JSON-RPC.
+> - **Persistence**: When running as an `.exe`, `user_preferences.json` and generated `outputs/` are automatically saved in the folder alongside the executable.
+
+---
+
+## Automated CI/CD & GitHub Actions
+
+This repository includes a continuous integration and release pipeline configured in [`.github/workflows/build.yml`](.github/workflows/build.yml):
+
+### 1. Automated Matrix Testing
+- Triggered on every `push` to `main` and all `pull_request` events.
+- Executes the self-test validation suite (`test_gemini_server.py`) across **Python 3.10, 3.11, and 3.12** on Windows runners.
+
+### 2. Automated Binary & Package Builds
+- Automatically builds:
+  - **Windows Directory Distribution**: `gemini-media-mcp-windows-x64.zip`
+  - **Windows Single-File Standalone**: `gemini-media-mcp-standalone.exe`
+  - **Python Package Wheels & Sdist**: `.whl` and `.tar.gz`
+- Uploads all builds as downloadable GitHub workflow artifacts.
+
+### 3. Automated GitHub Releases
+Tagging a release automatically generates a new GitHub Release with all binary assets attached:
+
+```bash
+# Tag a new release version
+git tag v2.2.0
+
+# Push the tag to GitHub to trigger release workflow
+git push origin v2.2.0
+```
+
+GitHub Actions will automatically test, compile, package, and attach the pre-built executables directly to the release page.
 
 ---
 
