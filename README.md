@@ -125,12 +125,18 @@ All tool calls are protected by an exception shield:
   - `HTTP 400`: Explains invalid parameters or unsupported aspect ratios.
   - `Safety Filters`: Details content moderation triggers and provides prompt rewriting advice.
 
-### 3. Pre-Flight Health Diagnostic (`check_api_status`)
+### 3. Pre-Flight Health Diagnostic (`check_api_status` & CLI Script)
 Run a diagnostic health check before starting heavy generation tasks:
 - Verifies `GEMINI_API_KEY` format.
 - Checks client connectivity and model availability.
 - Validates output directory write permissions.
 - Summarizes currently active operations.
+
+You can also run the quick standalone CLI diagnostic anytime:
+```powershell
+python check_key_and_image.py
+```
+This tests your API key authentication, lists all accessible image models, and runs a test image generation with full error diagnostics.
 
 ---
 
