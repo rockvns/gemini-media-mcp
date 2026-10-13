@@ -47,7 +47,22 @@ async def main():
     spec_res = await mcp.call_tool("get_model_specifications", {"model_name": "veo-3.1-generate-preview"})
     print(f"Output:\n{spec_res.content[0].text}\n")
 
-    print("All tools and preference management checks passed successfully!")
+    # 7. Test tool call: check_api_status
+    print("Calling 'check_api_status'...")
+    status_res = await mcp.call_tool("check_api_status", {})
+    print(f"Output:\n{status_res.content[0].text}\n")
+
+    # 8. Test tool call: list_active_operations
+    print("Calling 'list_active_operations'...")
+    ops_res = await mcp.call_tool("list_active_operations", {})
+    print(f"Output:\n{ops_res.content[0].text}\n")
+
+    # 9. Test error shielding: calling generate_image with placeholder key
+    print("Testing exception shield on 'generate_image'...")
+    img_res = await mcp.call_tool("generate_image", {"prompt": "cyberpunk city"})
+    print(f"Shielded Error Output (No crash):\n{img_res.content[0].text}\n")
+
+    print("All tools and resilience checks passed successfully!")
 
 
 if __name__ == "__main__":

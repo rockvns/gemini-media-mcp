@@ -1,6 +1,7 @@
 """
 User Preferences persistence and management.
 Supports persisting output_dir, video settings, and image settings.
+Defaults are unset initially, prompting the LLM / user to configure them on first interaction.
 """
 
 import os
@@ -21,25 +22,19 @@ class PreferencesManager:
 
     @classmethod
     def load(cls) -> Dict[str, Any]:
-        """Load user preferences from JSON, falling back to default."""
+        """Load user preferences from JSON, defaulting to unset."""
         if PREFERENCES_FILE.exists():
             try:
                 with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    prefs = {
-                        "output_dir": data.get("output_dir", DEFAULT_PREFERENCES["output_dir"]),
-                        "video": DEFAULT_PREFERENCES["video"].copy(),
-                        "image": DEFAULT_PREFERENCES["image"].copy()
+                    return {
+                        "output_dir": data.get("output_dir", None),
+                        "video": data.get("video", None),
+                        "image": data.get("image", None),
                     }
-                    if "video" in data:
-                        prefs["video"].update(data["video"])
-                    if "image" in data:
-                        prefs["image"].update(data["image"])
-                    return prefs
             except Exception:
                 pass
-        cls.save(DEFAULT_PREFERENCES)
-        return DEFAULT_PREFERENCES.copy()
+        return {"output_dir": None, "video": None, "image": None}
 
     @classmethod
     def save(cls, prefs: Dict[str, Any]) -> None:
@@ -54,7 +49,6 @@ class PreferencesManager:
         2. Environment variables (MEDIA_OUTPUT_DIR or OUTPUT_DIR)
         3. Default WORKSPACE_DIR / 'outputs'
         """
-        # 1. Check user preferences
         prefs = cls.load()
         pref_dir = prefs.get("output_dir")
         if pref_dir:
@@ -64,7 +58,6 @@ class PreferencesManager:
             p.mkdir(parents=True, exist_ok=True)
             return p
 
-        # 2. Check environment variable
         env_dir = os.environ.get("MEDIA_OUTPUT_DIR") or os.environ.get("OUTPUT_DIR")
         if env_dir:
             p = Path(env_dir)
@@ -73,7 +66,6 @@ class PreferencesManager:
             p.mkdir(parents=True, exist_ok=True)
             return p
 
-        # 3. Default fallback
         OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         return OUTPUTS_DIR
 
@@ -81,8 +73,8 @@ class PreferencesManager:
     def get_summary(cls) -> str:
         """Return formatted human-readable summary of saved preferences and active output path."""
         prefs = cls.load()
-        vp = prefs.get("video", {})
-        ip = prefs.get("image", {})
+        vp = prefs.get("video")
+        ip = prefs.get("image")
         effective_out = cls.get_effective_output_dir()
 
         # Identify source of output dir
@@ -94,22 +86,46 @@ class PreferencesManager:
         else:
             out_source = "default (./outputs)"
 
+        if not vp:
+            video_section = (
+                "[Video Preferences]\n"
+                "- Status: NOT CONFIGURED YET\n"
+                "- Note: The LLM will ask you for your preferred model, resolution, and aspect ratio on first interaction,\n"
+                "  or you can run 'set_user_preferences(media_type=\"video\", ...)'."
+            )
+        else:
+            video_section = (
+                "[Video Preferences]\n"
+                f"- Default Model: {vp.get('model', 'veo-3.1-generate-preview')}\n"
+                f"- Aspect Ratio: {vp.get('aspect_ratio', '16:9')}\n"
+                f"- Resolution: {vp.get('resolution', '720p')}\n"
+                f"- Duration: {vp.get('duration_seconds', 8)} seconds"
+            )
+
+        if not ip:
+            image_section = (
+                "[Image Preferences]\n"
+                "- Status: NOT CONFIGURED YET\n"
+                "- Note: The LLM will ask you for your preferred image model and size on first interaction,\n"
+                "  or you can run 'set_user_preferences(media_type=\"image\", ...)'."
+            )
+        else:
+            image_section = (
+                "[Image Preferences (Nano Banana)]\n"
+                f"- Default Model: {ip.get('model', 'gemini-nano-banana-2.1')}\n"
+                f"- Aspect Ratio: {ip.get('aspect_ratio', '16:9')}\n"
+                f"- Resolution Size: {ip.get('image_size', '2K')}\n"
+                f"- Google Search Grounding: {ip.get('enable_google_search', False)}"
+            )
+
         return f"""=== Current User Preferences ===
 
 [General & Storage]
 - Effective Output Directory: {effective_out} (Source: {out_source})
 
-[Video Preferences]
-- Default Model: {vp.get('model', 'veo-3.1-generate-preview')}
-- Aspect Ratio: {vp.get('aspect_ratio', '16:9')}
-- Resolution: {vp.get('resolution', '720p')}
-- Duration: {vp.get('duration_seconds', 8)} seconds
+{video_section}
 
-[Image Preferences (Nano Banana)]
-- Default Model: {ip.get('model', 'gemini-nano-banana-2.1')}
-- Aspect Ratio: {ip.get('aspect_ratio', '16:9')}
-- Resolution Size: {ip.get('image_size', '2K')}
-- Google Search Grounding: {ip.get('enable_google_search', False)}
+{image_section}
 
 Preferences file: {PREFERENCES_FILE}"""
 
@@ -128,7 +144,6 @@ Preferences file: {PREFERENCES_FILE}"""
         """Update preferences for video, image, or output directory."""
         prefs = cls.load()
 
-        # Update output_dir if specified
         if output_dir is not None:
             if output_dir.strip() == "" or output_dir.lower() == "default":
                 prefs["output_dir"] = None
@@ -138,6 +153,13 @@ Preferences file: {PREFERENCES_FILE}"""
         m_type = media_type.lower().strip() if media_type else None
 
         if m_type == "video":
+            if not prefs.get("video"):
+                prefs["video"] = {
+                    "model": "veo-3.1-generate-preview",
+                    "aspect_ratio": "16:9",
+                    "resolution": "720p",
+                    "duration_seconds": 8,
+                }
             target = prefs["video"]
             if model:
                 if model not in MODEL_SPECIFICATIONS or MODEL_SPECIFICATIONS[model]["media_type"] != "video":
@@ -151,6 +173,13 @@ Preferences file: {PREFERENCES_FILE}"""
                 target["duration_seconds"] = duration_seconds
 
         elif m_type == "image":
+            if not prefs.get("image"):
+                prefs["image"] = {
+                    "model": "gemini-nano-banana-2.1",
+                    "aspect_ratio": "16:9",
+                    "image_size": "2K",
+                    "enable_google_search": False,
+                }
             target = prefs["image"]
             if model:
                 if model not in MODEL_SPECIFICATIONS or MODEL_SPECIFICATIONS[model]["media_type"] != "image":
@@ -168,6 +197,6 @@ Preferences file: {PREFERENCES_FILE}"""
 
     @classmethod
     def reset(cls) -> str:
-        """Reset preferences back to recommended defaults."""
+        """Reset preferences back to unset defaults."""
         cls.save(DEFAULT_PREFERENCES)
-        return "User preferences reset to default recommendations.\n\n" + cls.get_summary()
+        return "User preferences reset to unconfigured defaults.\n\n" + cls.get_summary()

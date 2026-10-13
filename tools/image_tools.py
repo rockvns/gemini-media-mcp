@@ -1,10 +1,12 @@
 """
 MCP Tools for image generation, keyframe pair generation, and image editing.
+Protected with exception shielding to prevent MCP process crashes.
 """
 
 from typing import Optional, List
 from config.constants import MODEL_SPECIFICATIONS
 from config.preferences import PreferencesManager
+from services.client import format_api_error
 from services.nano_banana_service import (
     generate_nano_banana_image,
     generate_keyframes_pair,
@@ -52,44 +54,47 @@ def register_image_tools(mcp):
             output_path: Optional destination .png path.
             save_as_preference: If True, saves these parameters as your default image preferences.
         """
-        prefs = PreferencesManager.load()
-        i_prefs = prefs.get("image", {})
+        try:
+            prefs = PreferencesManager.load()
+            i_prefs = prefs.get("image") or {}
 
-        chosen_model = model or i_prefs.get("model", "gemini-nano-banana-2.1")
-        chosen_aspect = aspect_ratio or i_prefs.get("aspect_ratio", "16:9")
-        chosen_size = image_size or i_prefs.get("image_size", "2K")
-        chosen_search = enable_google_search if enable_google_search is not None else i_prefs.get("enable_google_search", False)
+            chosen_model = model or i_prefs.get("model", "gemini-nano-banana-2.1")
+            chosen_aspect = aspect_ratio or i_prefs.get("aspect_ratio", "16:9")
+            chosen_size = image_size or i_prefs.get("image_size", "2K")
+            chosen_search = enable_google_search if enable_google_search is not None else i_prefs.get("enable_google_search", False)
 
-        if save_as_preference:
-            PreferencesManager.update(
-                media_type="image",
+            if save_as_preference:
+                PreferencesManager.update(
+                    media_type="image",
+                    model=chosen_model,
+                    aspect_ratio=chosen_aspect,
+                    image_size=chosen_size,
+                    enable_google_search=chosen_search
+                )
+
+            if chosen_model not in MODEL_SPECIFICATIONS or MODEL_SPECIFICATIONS[chosen_model]["media_type"] != "image":
+                return (
+                    f"Error: Unknown image model '{chosen_model}'.\n"
+                    f"Available Image Models:\n"
+                    f"- 'gemini-nano-banana-2.1' (Recommended)\n"
+                    f"- 'gemini-3-pro-image'\n"
+                    f"- 'gemini-3.1-flash-image'\n"
+                    f"- 'gemini-3.1-flash-lite-image'\n"
+                    f"Use 'get_model_specifications(model_name=\"{chosen_model}\")' to inspect capabilities."
+                )
+
+            return generate_nano_banana_image(
+                prompt=prompt,
                 model=chosen_model,
+                character_paths=character_paths,
+                reference_image_paths=reference_image_paths,
                 aspect_ratio=chosen_aspect,
                 image_size=chosen_size,
-                enable_google_search=chosen_search
+                enable_google_search=chosen_search,
+                output_path=output_path,
             )
-
-        if chosen_model not in MODEL_SPECIFICATIONS or MODEL_SPECIFICATIONS[chosen_model]["media_type"] != "image":
-            return (
-                f"Error: Unknown image model '{chosen_model}'.\n"
-                f"Available Image Models:\n"
-                f"- 'gemini-nano-banana-2.1' (Recommended)\n"
-                f"- 'gemini-3-pro-image'\n"
-                f"- 'gemini-3.1-flash-image'\n"
-                f"- 'gemini-3.1-flash-lite-image'\n"
-                f"Use 'get_model_specifications(model_name=\"{chosen_model}\")' to inspect capabilities."
-            )
-
-        return generate_nano_banana_image(
-            prompt=prompt,
-            model=chosen_model,
-            character_paths=character_paths,
-            reference_image_paths=reference_image_paths,
-            aspect_ratio=chosen_aspect,
-            image_size=chosen_size,
-            enable_google_search=chosen_search,
-            output_path=output_path,
-        )
+        except Exception as exc:
+            return format_api_error(exc, context="generate_image")
 
     @mcp.tool()
     def generate_keyframes(
@@ -118,23 +123,26 @@ def register_image_tools(mcp):
             image_size: '1K', '2K', or '4K' (defaults to saved preference).
             output_dir: Optional directory to save keyframes.
         """
-        prefs = PreferencesManager.load()
-        i_prefs = prefs.get("image", {})
+        try:
+            prefs = PreferencesManager.load()
+            i_prefs = prefs.get("image") or {}
 
-        chosen_model = model or i_prefs.get("model", "gemini-nano-banana-2.1")
-        chosen_aspect = aspect_ratio or i_prefs.get("aspect_ratio", "16:9")
-        chosen_size = image_size or i_prefs.get("image_size", "2K")
+            chosen_model = model or i_prefs.get("model", "gemini-nano-banana-2.1")
+            chosen_aspect = aspect_ratio or i_prefs.get("aspect_ratio", "16:9")
+            chosen_size = image_size or i_prefs.get("image_size", "2K")
 
-        return generate_keyframes_pair(
-            start_prompt=start_prompt,
-            end_prompt=end_prompt,
-            num_frames=num_frames,
-            character_paths=character_paths,
-            model=chosen_model,
-            aspect_ratio=chosen_aspect,
-            image_size=chosen_size,
-            output_dir=output_dir,
-        )
+            return generate_keyframes_pair(
+                start_prompt=start_prompt,
+                end_prompt=end_prompt,
+                num_frames=num_frames,
+                character_paths=character_paths,
+                model=chosen_model,
+                aspect_ratio=chosen_aspect,
+                image_size=chosen_size,
+                output_dir=output_dir,
+            )
+        except Exception as exc:
+            return format_api_error(exc, context="generate_keyframes")
 
     @mcp.tool()
     def edit_image(
@@ -155,14 +163,17 @@ def register_image_tools(mcp):
             image_size: Optional target size ('1K', '2K', '4K').
             output_path: Optional destination .png path.
         """
-        prefs = PreferencesManager.load()
-        chosen_model = model or prefs.get("image", {}).get("model", "gemini-nano-banana-2.1")
+        try:
+            prefs = PreferencesManager.load()
+            chosen_model = model or (prefs.get("image") or {}).get("model", "gemini-nano-banana-2.1")
 
-        return edit_nano_banana_image(
-            prompt=prompt,
-            image_path=image_path,
-            model=chosen_model,
-            aspect_ratio=aspect_ratio,
-            image_size=image_size,
-            output_path=output_path,
-        )
+            return edit_nano_banana_image(
+                prompt=prompt,
+                image_path=image_path,
+                model=chosen_model,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+                output_path=output_path,
+            )
+        except Exception as exc:
+            return format_api_error(exc, context="edit_image")

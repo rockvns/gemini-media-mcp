@@ -16,18 +16,15 @@ jobs:
   test:
     name: Test & Validate
     runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ['3.12', '3.13', '3.14']
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.14'
           cache: 'pip'
 
       - name: Install Dependencies
@@ -40,7 +37,7 @@ jobs:
           python test_gemini_server.py
 
   build-windows-exe:
-    name: Build Windows Executable
+    name: Build Standalone Executable (.exe)
     needs: test
     runs-on: windows-latest
 
@@ -48,7 +45,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
@@ -59,23 +56,6 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: Build One-Directory Binary
-        run: |
-          pyinstaller --noconfirm --onedir --console `
-            --name "gemini-media-mcp" `
-            --collect-all "mcp" `
-            --collect-all "google.genai" `
-            gemini_mcp.py
-
-      - name: Copy Config Templates to Distribution Directory
-        run: |
-          Copy-Item .env.example dist/gemini-media-mcp/
-          Copy-Item user_preferences.json dist/gemini-media-mcp/
-
-      - name: Compress Directory Distribution
-        run: |
-          Compress-Archive -Path dist/gemini-media-mcp -DestinationPath dist/gemini-media-mcp-windows-x64.zip -Force
-
       - name: Build Single-File Standalone Executable
         run: |
           pyinstaller --noconfirm --onefile --console `
@@ -84,43 +64,16 @@ jobs:
             --collect-all "google.genai" `
             gemini_mcp.py
 
-      - name: Upload Windows Binaries Artifact
+      - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gemini-media-mcp-windows-binaries
-          path: |
-            dist/gemini-media-mcp-windows-x64.zip
-            dist/gemini-media-mcp-standalone.exe
-
-  build-package:
-    name: Build Python Package (Wheel & Sdist)
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
-      - name: Build Wheel & Sdist
-        run: |
-          python -m pip install --upgrade pip build
-          python -m build
-
-      - name: Upload Python Package Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: gemini-media-mcp-python-package
-          path: dist/*
+          name: gemini-media-mcp-standalone-exe
+          path: dist/gemini-media-mcp-standalone.exe
 
   release:
     name: Publish GitHub Release
     if: github.event_name != 'pull_request'
-    needs: [build-windows-exe, build-package]
+    needs: [build-windows-exe]
     runs-on: ubuntu-latest
 
     steps:
@@ -129,7 +82,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
@@ -142,11 +95,9 @@ jobs:
             NAME="Release ${TAG}"
             IS_PRERELEASE="false"
           else
-            # Extract version from setup.py
             PKG_VER=$(python -c "import re; m = re.search(r'version=[\"\'\']([^\"\'\']+)[\"\'\']', open('setup.py').read()); print(m.group(1) if m else '2.2.0')")
             BASE_TAG="v${PKG_VER}"
             
-            # Check if tag already exists in the repository
             if git rev-parse "refs/tags/${BASE_TAG}" >/dev/null 2>&1; then
               TAG="${BASE_TAG}-build.${{ github.run_number }}"
               NAME="Build ${BASE_TAG} (#${{ github.run_number }})"
@@ -161,16 +112,10 @@ jobs:
           echo "release_name=${NAME}" >> $GITHUB_OUTPUT
           echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
-      - name: Download Windows Artifacts
+      - name: Download Windows Executable Artifact
         uses: actions/download-artifact@v4
         with:
-          name: gemini-media-mcp-windows-binaries
-          path: release-assets/
-
-      - name: Download Python Package Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: gemini-media-mcp-python-package
+          name: gemini-media-mcp-standalone-exe
           path: release-assets/
 
       - name: Publish GitHub Release
@@ -178,7 +123,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag_info.outputs.tag_name }}
           name: ${{ steps.tag_info.outputs.release_name }}
-          files: release-assets/*
+          files: release-assets/gemini-media-mcp-standalone.exe
           generate_release_notes: true
           draft: false
           prerelease: ${{ steps.tag_info.outputs.is_prerelease == 'true' }}

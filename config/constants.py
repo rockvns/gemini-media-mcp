@@ -14,6 +14,7 @@ else:
 
 OUTPUTS_DIR = WORKSPACE_DIR / "outputs"
 PREFERENCES_FILE = WORKSPACE_DIR / "user_preferences.json"
+ACTIVE_OPERATIONS_FILE = WORKSPACE_DIR / "active_operations.json"
 
 # ==============================================================================
 # MODEL SPECIFICATIONS CATALOG
@@ -125,16 +126,6 @@ MODEL_SPECIFICATIONS: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_PREFERENCES: Dict[str, Any] = {
     "output_dir": None,
-    "video": {
-        "model": "veo-3.1-generate-preview",
-        "aspect_ratio": "16:9",
-        "resolution": "720p",
-        "duration_seconds": 8,
-    },
-    "image": {
-        "model": "gemini-nano-banana-2.1",
-        "aspect_ratio": "16:9",
-        "image_size": "2K",
-        "enable_google_search": False,
-    }
+    "video": None,
+    "image": None,
 }
