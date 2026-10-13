@@ -350,18 +350,19 @@ This repository includes a continuous integration and release pipeline configure
   - **Python Package Wheels & Sdist**: `.whl` and `.tar.gz`
 - Uploads all builds as downloadable GitHub workflow artifacts.
 
-### 3. Automated GitHub Releases
-Tagging a release automatically generates a new GitHub Release with all binary assets attached:
+### 3. Automated Tagging & GitHub Releases
+Releases and Git tags are **automatically generated** directly from the build pipeline:
+- **On Push to `main`**:
+  - The workflow automatically checks `setup.py` for the current package version (e.g. `2.2.0`).
+  - If tag `v2.2.0` does not exist yet on GitHub, it automatically creates the tag `v2.2.0` and creates an official release with Windows binaries attached.
+  - If tag `v2.2.0` already exists (an incremental commit on `main`), it automatically creates a build release (`v2.2.0-build.<run_number>`) so you always have the latest `.exe` available.
+- **On Manual Version Tag Push**:
+  - Pushing an explicit tag (e.g., `git push origin v2.3.0`) also triggers the release pipeline and attaches assets directly to that tag.
 
 ```bash
-# Tag a new release version
-git tag v2.2.0
-
-# Push the tag to GitHub to trigger release workflow
-git push origin v2.2.0
+# Simply push to main — tags and releases are handled automatically:
+git push origin main
 ```
-
-GitHub Actions will automatically test, compile, package, and attach the pre-built executables directly to the release page.
 
 ---
 
