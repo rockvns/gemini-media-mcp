@@ -40,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='gemini-media-mcp-standalone',
+    name='gemini-media-mcp',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

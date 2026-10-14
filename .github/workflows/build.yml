@@ -107,14 +107,14 @@ jobs:
         shell: powershell
         run: |
           $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Mixomate" -CertStoreLocation "Cert:\CurrentUser\My"
-          Set-AuthenticodeSignature -FilePath "dist\gemini-media-mcp-standalone.exe" -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
-          Get-AuthenticodeSignature "dist\gemini-media-mcp-standalone.exe" | Format-List
+          Set-AuthenticodeSignature -FilePath "dist\gemini-media-mcp.exe" -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
+          Get-AuthenticodeSignature "dist\gemini-media-mcp.exe" | Format-List
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gemini-media-mcp-standalone-exe
-          path: dist/gemini-media-mcp-standalone.exe
+          name: gemini-media-mcp-exe
+          path: dist/gemini-media-mcp.exe
 
   release:
     name: Publish GitHub Release
@@ -212,7 +212,7 @@ jobs:
       - name: Download Windows Executable Artifact
         uses: actions/download-artifact@v4
         with:
-          name: gemini-media-mcp-standalone-exe
+          name: gemini-media-mcp-exe
           path: release-assets/
 
       - name: Publish GitHub Release
@@ -220,7 +220,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag_info.outputs.tag_name }}
           name: ${{ steps.tag_info.outputs.release_name }}
-          files: release-assets/gemini-media-mcp-standalone.exe
+          files: release-assets/gemini-media-mcp.exe
           generate_release_notes: true
           draft: false
           prerelease: false
