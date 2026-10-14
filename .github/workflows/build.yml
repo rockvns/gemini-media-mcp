@@ -39,6 +39,7 @@ jobs:
   build-windows-exe:
     name: Build Standalone Executable (.exe)
     needs: test
+    if: github.event_name == 'push'
     runs-on: windows-latest
 
     steps:
