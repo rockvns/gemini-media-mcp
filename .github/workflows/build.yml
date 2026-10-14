@@ -106,7 +106,7 @@ jobs:
       - name: Sign Executable with Authenticode Signature
         shell: powershell
         run: |
-          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Gemini Media Project" -CertStoreLocation "Cert:\CurrentUser\My"
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Mixomate" -CertStoreLocation "Cert:\CurrentUser\My"
           Set-AuthenticodeSignature -FilePath "dist\gemini-media-mcp-standalone.exe" -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
           Get-AuthenticodeSignature "dist\gemini-media-mcp-standalone.exe" | Format-List
 
