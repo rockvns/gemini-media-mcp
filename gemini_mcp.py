@@ -8,6 +8,17 @@ Modularized architecture:
 - prompts/     : MCP prompt templates (Director, Keyframe, Consistency, Preferences).
 """
 
+import sys
+import logging
+
+# Strictly ensure all logging and warnings go to stderr so stdout remains 100% clean for MCP JSON-RPC
+logging.basicConfig(stream=sys.stderr, level=logging.WARNING, force=True)
+for name in ["google", "google.genai", "httpx", "httpcore", "mcp"]:
+    _l = logging.getLogger(name)
+    _l.setLevel(logging.WARNING)
+    _l.handlers = [logging.StreamHandler(sys.stderr)]
+    _l.propagate = False
+
 from mcp.server.mcpserver import MCPServer
 
 from config.constants import MODEL_SPECIFICATIONS
@@ -74,6 +85,13 @@ mcp.prompt()(character_consistency_prompt)
 
 
 def main():
+    # Start embedded web studio server in background daemon thread (localhost:8989 or PORT env)
+    try:
+        from services.web_server import start_web_server_thread
+        start_web_server_thread()
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to start web studio server: {e}\n")
+
     mcp.run(transport="stdio")
 
 

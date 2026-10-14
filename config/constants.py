@@ -22,20 +22,8 @@ ACTIVE_OPERATIONS_FILE = WORKSPACE_DIR / "active_operations.json"
 
 MODEL_SPECIFICATIONS: Dict[str, Dict[str, Any]] = {
     # Video Models
-    "veo-3.1-generate-preview": {
-        "name": "Veo 3.1 (Recommended Video)",
-        "media_type": "video",
-        "supported_resolutions": ["720p", "1080p", "4k"],
-        "supported_aspect_ratios": ["16:9", "9:16"],
-        "default_duration_seconds": 8,
-        "supported_durations": [8],
-        "max_reference_images": 3,
-        "supports_keyframes": True,
-        "native_audio": True,
-        "notes": "State-of-the-art 8-second video with native sound. Supports 0, 1, or 2 keyframes. 4k resolution has higher latency."
-    },
     "gemini-omni-1.1-flash": {
-        "name": "Gemini Omni 1.1 Flash",
+        "name": "Gemini Omni 1.1 Flash (Recommended Video)",
         "media_type": "video",
         "supported_resolutions": ["standard"],
         "supported_aspect_ratios": ["16:9"],
@@ -45,6 +33,18 @@ MODEL_SPECIFICATIONS: Dict[str, Dict[str, Any]] = {
         "supports_keyframes": False,
         "native_audio": True,
         "notes": "High-velocity multimodal conversational video generation via Interactions API."
+    },
+    "veo-3.1-generate-preview": {
+        "name": "Veo 3.1",
+        "media_type": "video",
+        "supported_resolutions": ["720p", "1080p", "4k"],
+        "supported_aspect_ratios": ["16:9", "9:16"],
+        "default_duration_seconds": 8,
+        "supported_durations": [8],
+        "max_reference_images": 3,
+        "supports_keyframes": True,
+        "native_audio": True,
+        "notes": "State-of-the-art 8-second video with native sound. Supports 0, 1, or 2 keyframes. 4k resolution has higher latency."
     },
     "veo-3.0-generate-001": {
         "name": "Veo 3.0",

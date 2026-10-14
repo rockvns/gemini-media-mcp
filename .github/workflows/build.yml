@@ -2,11 +2,15 @@ name: Build & Release
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - featuer
     tags:
       - 'v*'
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - featuer
   workflow_dispatch:
 
 permissions:
@@ -21,13 +25,32 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: Build Next.js Web Studio
+        run: |
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
+          cd ..
+
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
@@ -39,14 +62,33 @@ jobs:
   build-windows-exe:
     name: Build Standalone Executable (.exe)
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 'latest'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: Build Next.js Web Studio (Static Export)
+        run: |
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
+          cd ..
+
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
@@ -57,13 +99,9 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      - name: Build Single-File Standalone Executable
+      - name: Build Single-File Standalone Executable with Embedded Web Studio
         run: |
-          pyinstaller --noconfirm --onefile --console `
-            --name "gemini-media-mcp-standalone" `
-            --collect-all "mcp" `
-            --collect-all "google.genai" `
-            gemini_mcp.py
+          pyinstaller --noconfirm gemini-media-mcp-standalone.spec
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
@@ -83,35 +121,86 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
-      - name: Determine Tag and Release Information
+      - name: Determine Sequential Tag
         id: tag_info
         run: |
+          # Fetch all remote tags
+          git fetch --tags --force || true
+
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG="${{ github.ref_name }}"
-            NAME="Release ${TAG}"
-            IS_PRERELEASE="false"
           else
-            PKG_VER=$(python -c "import re; m = re.search(r'version=[\"\'\']([^\"\'\']+)[\"\'\']', open('setup.py').read()); print(m.group(1) if m else '2.2.0')")
-            BASE_TAG="v${PKG_VER}"
-            
-            if git rev-parse "refs/tags/${BASE_TAG}" >/dev/null 2>&1; then
-              TAG="${BASE_TAG}-build.${{ github.run_number }}"
-              NAME="Build ${BASE_TAG} (#${{ github.run_number }})"
-              IS_PRERELEASE="true"
-            else
-              TAG="${BASE_TAG}"
-              NAME="Release ${BASE_TAG}"
-              IS_PRERELEASE="false"
-            fi
+            TAG=$(python - << 'EOF'
+          import re, subprocess
+
+          # Get all existing tags
+          res = subprocess.run(["git", "tag", "-l"], capture_output=True, text=True)
+          all_tags = [t.strip() for t in res.stdout.splitlines() if t.strip()]
+
+          # Find valid semantic version tags: vX.Y or vX.Y.Z
+          parsed = []
+          for t in all_tags:
+              clean = t.split("-")[0]
+              m = re.match(r"^v?(\d+)\.(\d+)(?:\.(\d+))?$", clean)
+              if m:
+                  major = int(m.group(1))
+                  minor = int(m.group(2))
+                  patch = int(m.group(3)) if m.group(3) is not None else None
+                  parsed.append((major, minor, patch))
+
+          # Read base version from setup.py
+          base_str = "2.2.0"
+          try:
+              with open("setup.py", "r", encoding="utf-8") as f:
+                  m = re.search(r'version\s*=\s*["\']([^"\']+)["\']', f.read())
+                  if m:
+                      base_str = m.group(1)
+          except Exception:
+              pass
+
+          base_m = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?$", base_str)
+          if base_m:
+              b_major = int(base_m.group(1))
+              b_minor = int(base_m.group(2))
+              b_patch = int(base_m.group(3)) if base_m.group(3) is not None else None
+          else:
+              b_major, b_minor, b_patch = 2, 2, 0
+
+          if parsed:
+              parsed.sort(key=lambda x: (x[0], x[1], x[2] if x[2] is not None else -1))
+              h_major, h_minor, h_patch = parsed[-1]
+
+              # If setup.py has higher version than highest tag, start from setup.py
+              if (b_major, b_minor, b_patch if b_patch is not None else -1) > (h_major, h_minor, h_patch if h_patch is not None else -1):
+                  next_tag = f"v{b_major}.{b_minor}" if b_patch is None else f"v{b_major}.{b_minor}.{b_patch}"
+              else:
+                  # Sequentially increment version: e.g. 1.0 -> 1.1 -> 1.2 or 2.2.0 -> 2.2.1 -> 2.2.2
+                  if h_patch is not None:
+                      next_tag = f"v{h_major}.{h_minor}.{h_patch + 1}"
+                  else:
+                      next_tag = f"v{h_major}.{h_minor + 1}"
+          else:
+              next_tag = f"v{b_major}.{b_minor}" if b_patch is None else f"v{b_major}.{b_minor}.{b_patch}"
+
+          print(next_tag)
+          EOF
+          )
           fi
+
+          echo "Computed release tag: ${TAG}"
           echo "tag_name=${TAG}" >> $GITHUB_OUTPUT
-          echo "release_name=${NAME}" >> $GITHUB_OUTPUT
-          echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+          echo "release_name=Release ${TAG}" >> $GITHUB_OUTPUT
+
+          # Create and push git tag to repository so subsequent builds increment sequentially
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}" || true
 
       - name: Download Windows Executable Artifact
         uses: actions/download-artifact@v4
@@ -127,5 +216,5 @@ jobs:
           files: release-assets/gemini-media-mcp-standalone.exe
           generate_release_notes: true
           draft: false
-          prerelease: ${{ steps.tag_info.outputs.is_prerelease == 'true' }}
-          make_latest: ${{ steps.tag_info.outputs.is_prerelease != 'true' }}
+          prerelease: false
+          make_latest: true
