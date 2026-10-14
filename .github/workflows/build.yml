@@ -103,6 +103,13 @@ jobs:
         run: |
           pyinstaller --noconfirm gemini-media-mcp-standalone.spec
 
+      - name: Sign Executable with Authenticode Signature
+        shell: powershell
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Gemini Media Project" -CertStoreLocation "Cert:\CurrentUser\My"
+          Set-AuthenticodeSignature -FilePath "dist\gemini-media-mcp-standalone.exe" -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
+          Get-AuthenticodeSignature "dist\gemini-media-mcp-standalone.exe" | Format-List
+
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
