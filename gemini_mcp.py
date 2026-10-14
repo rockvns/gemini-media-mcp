@@ -85,6 +85,13 @@ mcp.prompt()(character_consistency_prompt)
 
 
 def main():
+    # Start embedded web studio server in background daemon thread (localhost:8989 or PORT env)
+    try:
+        from services.web_server import start_web_server_thread
+        start_web_server_thread()
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to start web studio server: {e}\n")
+
     mcp.run(transport="stdio")
 
 

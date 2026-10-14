@@ -39,3 +39,9 @@ build/
 dist/
 *.egg-info/
 *.spec
+!gemini-media-mcp-standalone.spec
+
+# Web Artifacts
+web/node_modules/
+web/.next/
+web/out/
