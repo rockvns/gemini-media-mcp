@@ -234,6 +234,18 @@ async def reset_preferences(request) -> JSONResponse:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+async def get_models(request) -> JSONResponse:
+    """Retrieve full MODEL_SPECIFICATIONS catalog directly from server."""
+    try:
+        model_name = request.query_params.get("model")
+        if model_name:
+            spec = MODEL_SPECIFICATIONS.get(model_name)
+            return JSONResponse({"success": True, "spec": spec})
+        return JSONResponse({"success": True, "specs": MODEL_SPECIFICATIONS})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
 async def get_operations(request) -> JSONResponse:
     """List tracked generation operations."""
     try:
@@ -305,24 +317,50 @@ async def call_mcp_tool_route(request) -> JSONResponse:
 
         elif tool == "generate_video":
             prompt = args.get("prompt")
-            model = args.get("model", "veo-3.1-generate-preview")
+            model = args.get("model", "gemini-omni-1.1-flash")
+            spec = MODEL_SPECIFICATIONS.get(model, {})
+            
+            # Sanitize aspect ratio, resolution, duration against model spec
+            supported_ar = spec.get("supported_aspect_ratios", ["16:9"])
+            ar = args.get("aspect_ratio")
+            if not ar or ar not in supported_ar:
+                ar = supported_ar[0]
+
+            supported_res = spec.get("supported_resolutions", ["720p"])
+            res_val = args.get("resolution")
+            if not res_val or res_val not in supported_res:
+                res_val = supported_res[0]
+
+            supported_dur = spec.get("supported_durations", [8])
+            dur = args.get("duration_seconds")
+            if not dur or dur not in supported_dur:
+                dur = spec.get("default_duration_seconds", supported_dur[0])
+
+            max_refs = spec.get("max_reference_images", 0)
+            char_paths = args.get("character_paths") or []
+            if max_refs > 0 and char_paths:
+                char_paths = char_paths[:max_refs]
+            elif max_refs == 0:
+                char_paths = None
+
             if "omni" in model.lower():
                 res = generate_omni_video(
                     prompt=prompt,
                     model=model,
-                    character_paths=args.get("character_paths"),
+                    character_paths=char_paths,
                     output_path=args.get("output_path"),
                 )
             else:
+                supports_kf = spec.get("supports_keyframes", False)
                 res = generate_veo_video(
                     prompt=prompt,
                     model=model,
-                    first_frame_path=args.get("first_frame_path"),
-                    last_frame_path=args.get("last_frame_path"),
-                    character_paths=args.get("character_paths"),
-                    aspect_ratio=args.get("aspect_ratio", "16:9"),
-                    resolution=args.get("resolution", "720p"),
-                    duration_seconds=args.get("duration_seconds", 8),
+                    first_frame_path=args.get("first_frame_path") if supports_kf else None,
+                    last_frame_path=args.get("last_frame_path") if supports_kf else None,
+                    character_paths=char_paths,
+                    aspect_ratio=ar,
+                    resolution=res_val,
+                    duration_seconds=dur,
                     negative_prompt=args.get("negative_prompt"),
                     output_path=args.get("output_path"),
                     wait_for_completion=False,
@@ -330,38 +368,102 @@ async def call_mcp_tool_route(request) -> JSONResponse:
             return JSONResponse({"success": not res.startswith("Error"), "content": res})
 
         elif tool == "generate_image":
+            model = args.get("model", "gemini-nano-banana-2.1")
+            spec = MODEL_SPECIFICATIONS.get(model, {})
+
+            # Sanitize aspect ratio & image size
+            supported_ar = spec.get("supported_aspect_ratios", ["16:9"])
+            ar = args.get("aspect_ratio")
+            if not ar or ar not in supported_ar:
+                ar = supported_ar[0]
+
+            supported_sizes = spec.get("supported_sizes", ["2K"])
+            size_val = args.get("image_size")
+            if not size_val or size_val not in supported_sizes:
+                size_val = supported_sizes[0]
+
+            search_supported = spec.get("supports_google_search", False)
+            enable_search = bool(args.get("enable_google_search", False)) if search_supported else False
+
+            max_chars = spec.get("max_character_references", 4)
+            c_paths = args.get("character_paths") or []
+            if max_chars > 0 and c_paths:
+                c_paths = c_paths[:max_chars]
+            elif max_chars == 0:
+                c_paths = None
+
+            max_refs = spec.get("max_reference_images", 14)
+            r_paths = args.get("reference_image_paths") or []
+            if max_refs > 0 and r_paths:
+                r_paths = r_paths[:max_refs]
+            elif max_refs == 0:
+                r_paths = None
+
             res = generate_nano_banana_image(
                 prompt=args.get("prompt"),
-                model=args.get("model", "gemini-nano-banana-2.1"),
-                character_paths=args.get("character_paths"),
-                reference_image_paths=args.get("reference_image_paths"),
-                aspect_ratio=args.get("aspect_ratio", "16:9"),
-                image_size=args.get("image_size", "2K"),
-                enable_google_search=args.get("enable_google_search", False),
+                model=model,
+                character_paths=c_paths,
+                reference_image_paths=r_paths,
+                aspect_ratio=ar,
+                image_size=size_val,
+                enable_google_search=enable_search,
                 output_path=args.get("output_path"),
             )
             return JSONResponse({"success": not res.startswith("Error"), "content": res})
 
         elif tool == "generate_keyframes":
+            model = args.get("model", "gemini-nano-banana-2.1")
+            spec = MODEL_SPECIFICATIONS.get(model, {})
+
+            supported_ar = spec.get("supported_aspect_ratios", ["16:9"])
+            ar = args.get("aspect_ratio")
+            if not ar or ar not in supported_ar:
+                ar = supported_ar[0]
+
+            supported_sizes = spec.get("supported_sizes", ["2K"])
+            size_val = args.get("image_size")
+            if not size_val or size_val not in supported_sizes:
+                size_val = supported_sizes[0]
+
+            max_chars = spec.get("max_character_references", 4)
+            c_paths = args.get("character_paths") or []
+            if max_chars > 0 and c_paths:
+                c_paths = c_paths[:max_chars]
+            elif max_chars == 0:
+                c_paths = None
+
             res = generate_keyframes_pair(
                 start_prompt=args.get("start_prompt"),
                 end_prompt=args.get("end_prompt"),
                 num_frames=args.get("num_frames", 1),
-                character_paths=args.get("character_paths"),
-                model=args.get("model", "gemini-nano-banana-2.1"),
-                aspect_ratio=args.get("aspect_ratio", "16:9"),
-                image_size=args.get("image_size", "2K"),
+                character_paths=c_paths,
+                model=model,
+                aspect_ratio=ar,
+                image_size=size_val,
                 output_dir=args.get("output_dir"),
             )
             return JSONResponse({"success": not res.startswith("Error"), "content": res})
 
         elif tool == "edit_image":
+            model = args.get("model", "gemini-nano-banana-2.1")
+            spec = MODEL_SPECIFICATIONS.get(model, {})
+
+            supported_ar = spec.get("supported_aspect_ratios", ["16:9"])
+            ar = args.get("aspect_ratio")
+            if ar and ar not in supported_ar:
+                ar = supported_ar[0]
+
+            supported_sizes = spec.get("supported_sizes", ["2K"])
+            size_val = args.get("image_size")
+            if size_val and size_val not in supported_sizes:
+                size_val = supported_sizes[0]
+
             res = edit_nano_banana_image(
                 prompt=args.get("prompt"),
                 image_path=args.get("image_path"),
-                model=args.get("model", "gemini-nano-banana-2.1"),
-                aspect_ratio=args.get("aspect_ratio"),
-                image_size=args.get("image_size"),
+                model=model,
+                aspect_ratio=ar,
+                image_size=size_val,
                 output_path=args.get("output_path"),
             )
             return JSONResponse({"success": not res.startswith("Error"), "content": res})
@@ -480,10 +582,11 @@ def create_web_app() -> Starlette:
         Route("/api/env", get_env_config, methods=["GET"]),
         Route("/api/env", update_env_config, methods=["POST"]),
 
-        # Preferences
+        # Preferences & Models
         Route("/api/mcp/preferences", get_preferences, methods=["GET"]),
         Route("/api/mcp/preferences", update_preferences, methods=["POST"]),
         Route("/api/mcp/preferences", reset_preferences, methods=["DELETE"]),
+        Route("/api/mcp/models", get_models, methods=["GET"]),
 
         # Operations
         Route("/api/mcp/operations", get_operations, methods=["GET"]),

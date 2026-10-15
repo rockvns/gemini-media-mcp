@@ -29,12 +29,16 @@ class PreferencesManager:
                     data = json.load(f)
                     return {
                         "output_dir": data.get("output_dir", None),
-                        "video": data.get("video", None),
-                        "image": data.get("image", None),
+                        "video": data.get("video") or dict(DEFAULT_PREFERENCES["video"]),
+                        "image": data.get("image") or dict(DEFAULT_PREFERENCES["image"]),
                     }
             except Exception:
                 pass
-        return {"output_dir": None, "video": None, "image": None}
+        return {
+            "output_dir": None,
+            "video": dict(DEFAULT_PREFERENCES["video"]),
+            "image": dict(DEFAULT_PREFERENCES["image"]),
+        }
 
     @classmethod
     def save(cls, prefs: Dict[str, Any]) -> None:

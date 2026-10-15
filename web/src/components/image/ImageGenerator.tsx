@@ -20,6 +20,7 @@ import {
   Eye,
 } from "lucide-react";
 import { IMAGE_MODELS, ASPECT_RATIOS } from "@/lib/constants";
+import { RecentProcessedPanel } from "@/components/gallery/RecentProcessedPanel";
 
 type StudioMode = "generate" | "keyframes" | "edit";
 
@@ -77,6 +78,25 @@ export function ImageGenerator() {
   }, []);
 
   const currentModelSpec = IMAGE_MODELS[model] || IMAGE_MODELS["gemini-nano-banana-2.1"];
+
+  const handleModelSelect = (newModelId: string) => {
+    setModel(newModelId);
+    const spec = IMAGE_MODELS[newModelId];
+    if (spec) {
+      if (!spec.supportedSizes.includes(imageSize)) {
+        setImageSize(spec.supportedSizes[0]);
+      }
+      if (!spec.supportedAspectRatios.includes(aspectRatio)) {
+        setAspectRatio(spec.supportedAspectRatios[0]);
+      }
+      if (!spec.supportsGoogleSearch) {
+        setEnableGoogleSearch(false);
+      }
+      if (characterPaths.length > spec.maxCharacterReferences) {
+        setCharacterPaths(characterPaths.slice(0, spec.maxCharacterReferences));
+      }
+    }
+  };
 
   // File upload helper
   const handleUpload = async (file: File, type: "char" | "ref" | "editSrc") => {
@@ -434,12 +454,7 @@ export function ImageGenerator() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => {
-                      setModel(m.id);
-                      if (!m.supportedSizes.includes(imageSize)) {
-                        setImageSize(m.supportedSizes[0]);
-                      }
-                    }}
+                    onClick={() => handleModelSelect(m.id)}
                     className={`p-3 rounded-xl border text-left transition-all ${
                       isSelected
                         ? "bg-cyan-600/15 border-cyan-500 text-white shadow-md shadow-cyan-500/10"
@@ -714,21 +729,43 @@ export function ImageGenerator() {
           </button>
         </form>
 
-        {/* Right Column: Results Gallery & Lightbox (5 columns) */}
+        {/* Right Column: Results Gallery & Lightbox + Recent Media Panel (5 columns) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="sticky top-24 space-y-4">
+          {/* Quick-Access Recent Processed Media Panel */}
+          <RecentProcessedPanel
+            currentModel={model}
+            supportsKeyframes={false}
+            supportsCharacters={currentModelSpec.maxCharacterReferences > 0}
+            maxCharacterCount={currentModelSpec.maxCharacterReferences}
+            currentCharacterCount={characterPaths.length}
+            onAddCharacter={(filePath) => {
+              if (
+                characterPaths.length < currentModelSpec.maxCharacterReferences &&
+                !characterPaths.includes(filePath)
+              ) {
+                setCharacterPaths([...characterPaths, filePath]);
+              }
+            }}
+            onUseAsEditSource={(filePath, previewUrl) => {
+              setStudioMode("edit");
+              setEditSourcePath(filePath);
+              setEditSourcePreview(previewUrl);
+            }}
+          />
+
+          <div className="space-y-4">
             <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-              Studio Render Gallery ({resultImages.length})
+              Current Session Renders ({resultImages.length})
             </h3>
 
             {resultImages.length === 0 ? (
-              <div className="bg-[#121524] border border-[#21273f] rounded-2xl p-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#171a2e] flex items-center justify-center mx-auto text-cyan-400 border border-[#272e48]">
-                  <ImageIcon className="w-6 h-6" />
+              <div className="bg-[#121524] border border-[#21273f] rounded-2xl p-6 text-center space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-[#171a2e] flex items-center justify-center mx-auto text-cyan-400 border border-[#272e48]">
+                  <ImageIcon className="w-5 h-5" />
                 </div>
-                <h4 className="text-sm font-semibold text-zinc-200">No Images Yet</h4>
-                <p className="text-xs text-zinc-400 max-w-xs mx-auto">
-                  Enter your prompt or choose keyframe mode and click generate. Rendered 1K/2K/4K images will appear here immediately.
+                <h4 className="text-xs font-semibold text-zinc-200">Session Images</h4>
+                <p className="text-[11px] text-zinc-400 max-w-xs mx-auto">
+                  Images generated in this browser session will also appear here in full resolution.
                 </p>
               </div>
             ) : (

@@ -37,6 +37,18 @@ export interface MediaAsset {
 }
 
 export const VIDEO_MODELS: Record<string, VideoModelSpec> = {
+  "gemini-omni-1.1-flash": {
+    id: "gemini-omni-1.1-flash",
+    name: "Gemini Omni 1.1 Flash (Recommended Video)",
+    supportedResolutions: ["standard"],
+    supportedAspectRatios: ["16:9"],
+    supportedDurations: [5, 8],
+    defaultDuration: 8,
+    maxReferenceImages: 1,
+    supportsKeyframes: false,
+    nativeAudio: true,
+    notes: "Ultra-fast multimodal video generation via Interactions API.",
+  },
   "veo-3.1-generate-preview": {
     id: "veo-3.1-generate-preview",
     name: "Google Veo 3.1 (Cinematic & Audio)",
@@ -48,18 +60,6 @@ export const VIDEO_MODELS: Record<string, VideoModelSpec> = {
     supportsKeyframes: true,
     nativeAudio: true,
     notes: "State-of-the-art 8s video with native sound, keyframe interpolation (0, 1, or 2 frames), and character anchors.",
-  },
-  "gemini-omni-1.1-flash": {
-    id: "gemini-omni-1.1-flash",
-    name: "Gemini Omni 1.1 Flash (Ultra-Fast)",
-    supportedResolutions: ["standard"],
-    supportedAspectRatios: ["16:9"],
-    supportedDurations: [5, 8],
-    defaultDuration: 8,
-    maxReferenceImages: 1,
-    supportsKeyframes: false,
-    nativeAudio: true,
-    notes: "Ultra-fast multimodal video generation via Interactions API.",
   },
   "veo-3.0-generate-001": {
     id: "veo-3.0-generate-001",

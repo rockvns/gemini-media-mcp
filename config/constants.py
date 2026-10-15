@@ -126,6 +126,16 @@ MODEL_SPECIFICATIONS: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_PREFERENCES: Dict[str, Any] = {
     "output_dir": None,
-    "video": None,
-    "image": None,
+    "video": {
+        "model": "gemini-omni-1.1-flash",
+        "aspect_ratio": "16:9",
+        "resolution": "standard",
+        "duration_seconds": 8,
+    },
+    "image": {
+        "model": "gemini-nano-banana-2.1",
+        "aspect_ratio": "16:9",
+        "image_size": "2K",
+        "enable_google_search": False,
+    },
 }

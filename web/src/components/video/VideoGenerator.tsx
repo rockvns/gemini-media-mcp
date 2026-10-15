@@ -7,13 +7,14 @@ import { DirectorModal } from "./DirectorModal";
 import { KeyframeUploader, KeyframeMode } from "./KeyframeUploader";
 import { CharacterRefPicker } from "./CharacterRefPicker";
 import { ActiveOperationCard, OperationData } from "./ActiveOperationCard";
+import { RecentProcessedPanel } from "@/components/gallery/RecentProcessedPanel";
 
 export function VideoGenerator() {
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
-  const [model, setModel] = useState("veo-3.1-generate-preview");
+  const [model, setModel] = useState("gemini-omni-1.1-flash");
   const [aspectRatio, setAspectRatio] = useState("16:9");
-  const [resolution, setResolution] = useState("720p");
+  const [resolution, setResolution] = useState("standard");
   const [durationSeconds, setDurationSeconds] = useState(8);
   const [saveAsPreference, setSaveAsPreference] = useState(false);
 
@@ -376,9 +377,9 @@ export function VideoGenerator() {
           </button>
         </form>
 
-        {/* Right Column: Active Job Card / Monitor (5 columns) */}
+        {/* Right Column: Active Job Card / Monitor & Recent Processed Media (5 columns) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="sticky top-24 space-y-4">
+          <div className="space-y-4">
             <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
               Active Video Render
             </h3>
@@ -390,17 +391,44 @@ export function VideoGenerator() {
                 autoPoll={true}
               />
             ) : (
-              <div className="bg-[#121524] border border-[#21273f] rounded-2xl p-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#171a2e] flex items-center justify-center mx-auto text-violet-400 border border-[#272e48]">
-                  <Video className="w-6 h-6" />
+              <div className="bg-[#121524] border border-[#21273f] rounded-2xl p-6 text-center space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-[#171a2e] flex items-center justify-center mx-auto text-violet-400 border border-[#272e48]">
+                  <Video className="w-5 h-5" />
                 </div>
-                <h4 className="text-sm font-semibold text-zinc-200">No Video In Progress</h4>
-                <p className="text-xs text-zinc-400 max-w-xs mx-auto">
-                  Configure your cinematic prompt and click &quot;Generate Video&quot;. The task will dispatch asynchronously with zero timeout.
+                <h4 className="text-xs font-semibold text-zinc-200">No Video In Progress</h4>
+                <p className="text-[11px] text-zinc-400 max-w-xs mx-auto">
+                  Configure your prompt and click generate. Veo renders dispatch asynchronously with zero timeout.
                 </p>
               </div>
             )}
           </div>
+
+          {/* Quick-Access Recent Processed Media Panel */}
+          <RecentProcessedPanel
+            currentModel={model}
+            supportsKeyframes={currentModelSpec.supportsKeyframes}
+            supportsCharacters={currentModelSpec.maxReferenceImages > 0}
+            maxCharacterCount={currentModelSpec.maxReferenceImages}
+            currentCharacterCount={characterPaths.length}
+            onAddCharacter={(filePath) => {
+              if (characterPaths.length < currentModelSpec.maxReferenceImages && !characterPaths.includes(filePath)) {
+                setCharacterPaths([...characterPaths, filePath]);
+              }
+            }}
+            onSetKeyframe={(frameType, filePath, previewUrl) => {
+              if (currentModelSpec.supportsKeyframes) {
+                if (frameType === "first") {
+                  setKeyframeMode(keyframeMode === "none" ? "single" : keyframeMode);
+                  setFirstFramePath(filePath);
+                  setFirstFramePreview(previewUrl);
+                } else {
+                  setKeyframeMode("pair");
+                  setLastFramePath(filePath);
+                  setLastFramePreview(previewUrl);
+                }
+              }
+            }}
+          />
         </div>
       </div>
 
